@@ -50,4 +50,6 @@ locals {
   wrapped = (var.my_var == null ? 1 :
     var.your_var == null ? 2 :
   3)
+  not_wrapped = ((var.my_var == null) ? 1 :
+  lookup(var.my_map, var.my_var))
 }

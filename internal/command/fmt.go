@@ -382,19 +382,13 @@ func (c *FmtCommand) formatValueExpr(tokens hclwrite.Tokens) hclwrite.Tokens {
 	// parses correctly after unwrapping. This may be redundant in some cases,
 	// but is required for at least multi-line ternary expressions.
 	isMultiLine := false
-	hasLeadingParen := false
-	hasTrailingParen := false
-	for i, token := range trimmed {
-		switch {
-		case i == 0 && token.Type == hclsyntax.TokenOParen:
-			hasLeadingParen = true
-		case token.Type == hclsyntax.TokenNewline:
+	for _, token := range trimmed {
+		if token.Type == hclsyntax.TokenNewline {
 			isMultiLine = true
-		case i == len(trimmed)-1 && token.Type == hclsyntax.TokenCParen:
-			hasTrailingParen = true
+			break
 		}
 	}
-	if isMultiLine && !(hasLeadingParen && hasTrailingParen) {
+	if isMultiLine && !c.isParenthesized(trimmed) {
 		wrapped := make(hclwrite.Tokens, 0, len(trimmed)+2)
 		wrapped = append(wrapped, &hclwrite.Token{
 			Type:  hclsyntax.TokenOParen,
@@ -410,6 +404,31 @@ func (c *FmtCommand) formatValueExpr(tokens hclwrite.Tokens) hclwrite.Tokens {
 	}
 
 	return trimmed
+}
+
+// isParenthesized returns true if the given tokens are a single pair of
+// parentheses enclosing everything else, like "(a ? b : c)". It returns false
+// for sequences that only start and end with parentheses from different pairs,
+// like "(a) ? b : c(d)".
+func (c *FmtCommand) isParenthesized(tokens hclwrite.Tokens) bool {
+	if len(tokens) < 2 || tokens[0].Type != hclsyntax.TokenOParen || tokens[len(tokens)-1].Type != hclsyntax.TokenCParen {
+		return false
+	}
+	depth := 0
+	for i, token := range tokens {
+		switch token.Type {
+		case hclsyntax.TokenOParen:
+			depth++
+		case hclsyntax.TokenCParen:
+			depth--
+			if depth == 0 {
+				// This closes the opening parenthesis, so it must be the
+				// last token for the whole sequence to be wrapped.
+				return i == len(tokens)-1
+			}
+		}
+	}
+	return false
 }
 
 func (c *FmtCommand) formatTypeExpr(tokens hclwrite.Tokens) hclwrite.Tokens {
